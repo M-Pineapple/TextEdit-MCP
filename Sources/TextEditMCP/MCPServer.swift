@@ -9,51 +9,71 @@ import Foundation
 
 class MCPServer {
     private let rtfService = RTFDocumentService()
+    private let logger = MCPLogger()
     
     func start() async {
         // Initialize stdio transport
         let input = FileHandle.standardInput
         let output = FileHandle.standardOutput
         
-        // Log to stderr to avoid interfering with protocol
-        let logger = MCPLogger()
         logger.info("TextEdit MCP Server started")
         
-        // Main message loop
+        // Process messages continuously
+        await processMessages(input: input, output: output)
+    }
+    
+    private func processMessages(input: FileHandle, output: FileHandle) async {
+        var buffer = ""
+        
         while true {
-            do {
-                // Read JSON-RPC message
-                guard let message = try await readMessage(from: input) else {
-                    break
+            autoreleasepool {
+                // Read available data
+                let data = input.availableData
+                
+                if data.isEmpty {
+                    // No more data, exit gracefully
+                    logger.info("No more data, shutting down")
+                    return
                 }
                 
-                // Process the message
-                let response = try await processMessage(message)
-                
-                // Send response
-                try await sendMessage(response, to: output)
-                
-            } catch {
-                logger.error("Error processing message: \(error)")
+                // Append to buffer
+                if let str = String(data: data, encoding: .utf8) {
+                    buffer += str
+                    
+                    // Process complete lines
+                    while let lineRange = buffer.range(of: "\n") {
+                        let line = String(buffer[..<lineRange.lowerBound])
+                        buffer.removeSubrange(...lineRange.lowerBound)
+                        
+                        if !line.isEmpty {
+                            Task {
+                                await processLine(line, output: output)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
     
-    private func readMessage(from input: FileHandle) async throws -> [String: Any]? {
-        // Read line from stdin
-        guard let data = input.availableData.isEmpty ? nil : input.availableData,
-              let line = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !line.isEmpty else {
-            return nil
+    private func processLine(_ line: String, output: FileHandle) async {
+        do {
+            // Parse JSON
+            guard let jsonData = line.data(using: .utf8),
+                  let message = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+                logger.error("Failed to parse JSON: \(line)")
+                return
+            }
+            
+            // Process the message
+            let response = try await processMessage(message)
+            
+            // Send response
+            try await sendMessage(response, to: output)
+            
+        } catch {
+            logger.error("Error processing line: \(error)")
         }
-        
-        // Parse JSON
-        guard let jsonData = line.data(using: .utf8),
-              let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-            throw MCPError.invalidJSON
-        }
-        
-        return json
     }
     
     private func processMessage(_ message: [String: Any]) async throws -> [String: Any] {
@@ -65,13 +85,18 @@ class MCPServer {
         let id = message["id"]
         let params = message["params"] as? [String: Any] ?? [:]
         
+        logger.debug("Processing method: \(method)")
+        
         // Handle different methods
         switch method {
         case "initialize":
             return createResponse(id: id, result: [
                 "protocolVersion": "1.0",
                 "serverName": "TextEdit MCP",
-                "serverVersion": "1.0.0"
+                "serverVersion": "1.0.0",
+                "capabilities": [
+                    "tools": true
+                ]
             ])
             
         case "tools/list":
@@ -80,7 +105,7 @@ class MCPServer {
                     [
                         "name": "create_rtf_document",
                         "description": "Create a formatted RTF document with TextEdit compatibility",
-                        "parameters": [
+                        "inputSchema": [
                             "type": "object",
                             "properties": [
                                 "content": [
@@ -94,34 +119,17 @@ class MCPServer {
                                 "template": [
                                     "type": "string",
                                     "enum": ["business", "technical", "meeting", "custom"],
-                                    "description": "Document template to use"
+                                    "description": "Document template to use",
+                                    "default": "business"
                                 ]
                             ],
                             "required": ["content", "output_path"]
-                        ]
-                    ],
-                    [
-                        "name": "apply_rtf_formatting",
-                        "description": "Apply formatting to an existing RTF document",
-                        "parameters": [
-                            "type": "object",
-                            "properties": [
-                                "file_path": [
-                                    "type": "string",
-                                    "description": "Path to the RTF file"
-                                ],
-                                "formatting": [
-                                    "type": "array",
-                                    "description": "Array of formatting instructions"
-                                ]
-                            ],
-                            "required": ["file_path", "formatting"]
                         ]
                     ]
                 ]
             ])
             
-        case "tools/execute":
+        case "tools/call":
             return try await executeTool(params: params, id: id)
             
         default:
@@ -139,7 +147,9 @@ class MCPServer {
         case "create_rtf_document":
             let content = arguments["content"] as? String ?? ""
             let outputPath = arguments["output_path"] as? String ?? ""
-            let template = arguments["template"] as? String ?? "custom"
+            let template = arguments["template"] as? String ?? "business"
+            
+            logger.info("Creating RTF document at: \(outputPath)")
             
             let result = try await rtfService.createDocument(
                 content: content,
@@ -148,23 +158,14 @@ class MCPServer {
             )
             
             return createResponse(id: id, result: [
-                "success": result.success,
-                "path": result.path,
-                "message": result.message
-            ])
-            
-        case "apply_rtf_formatting":
-            let filePath = arguments["file_path"] as? String ?? ""
-            let formatting = arguments["formatting"] as? [[String: Any]] ?? []
-            
-            let result = try await rtfService.applyFormatting(
-                filePath: filePath,
-                formatting: formatting
-            )
-            
-            return createResponse(id: id, result: [
-                "success": result.success,
-                "message": result.message
+                "content": [
+                    [
+                        "type": "text",
+                        "text": result.success ? 
+                            "✅ RTF document created successfully at: \(result.path)" :
+                            "❌ Failed to create document: \(result.message)"
+                    ]
+                ]
             ])
             
         default:
@@ -173,13 +174,15 @@ class MCPServer {
     }
     
     private func sendMessage(_ message: [String: Any], to output: FileHandle) async throws {
-        let data = try JSONSerialization.data(withJSONObject: message, options: [])
+        let data = try JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])
         guard let jsonString = String(data: data, encoding: .utf8) else {
             throw MCPError.encodingError
         }
         
         // Write to stdout with newline
-        output.write((jsonString + "\n").data(using: .utf8)!)
+        if let outputData = (jsonString + "\n").data(using: .utf8) {
+            output.write(outputData)
+        }
     }
     
     private func createResponse(id: Any?, result: [String: Any]) -> [String: Any] {
@@ -203,5 +206,4 @@ enum MCPError: Error {
     case invalidParameters
     case unknownTool(String)
     case encodingError
-    case messageTooLarge
 }

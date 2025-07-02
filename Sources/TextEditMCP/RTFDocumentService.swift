@@ -36,46 +36,16 @@ struct RTFDocumentService {
         // Expand tilde in path
         let expandedPath = NSString(string: outputPath).expandingTildeInPath
         
+        // Create directory if needed
+        let directory = (expandedPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        
         // Write to file
         do {
             try rtfData.write(to: URL(fileURLWithPath: expandedPath))
             return CreateResult(success: true, path: expandedPath, message: "Document created successfully")
         } catch {
             return CreateResult(success: false, path: "", message: "Failed to write file: \(error)")
-        }
-    }
-    
-    func applyFormatting(filePath: String, formatting: [[String: Any]]) async throws -> FormatResult {
-        let expandedPath = NSString(string: filePath).expandingTildeInPath
-        let url = URL(fileURLWithPath: expandedPath)
-        
-        // Read existing RTF
-        guard let attributedString = try? NSMutableAttributedString(
-            url: url,
-            options: [.documentType: NSAttributedString.DocumentType.rtf],
-            documentAttributes: nil
-        ) else {
-            return FormatResult(success: false, message: "Failed to read RTF file")
-        }
-        
-        // Apply formatting
-        for format in formatting {
-            applyFormat(to: attributedString, format: format)
-        }
-        
-        // Save back
-        guard let rtfData = attributedString.rtf(from: NSRange(location: 0, length: attributedString.length),
-                                                 documentAttributes: [
-                                                     .documentType: NSAttributedString.DocumentType.rtf
-                                                 ]) else {
-            return FormatResult(success: false, message: "Failed to create RTF data")
-        }
-        
-        do {
-            try rtfData.write(to: url)
-            return FormatResult(success: true, message: "Formatting applied successfully")
-        } catch {
-            return FormatResult(success: false, message: "Failed to write file: \(error)")
         }
     }
     
@@ -114,6 +84,15 @@ struct RTFDocumentService {
                 ]
                 result.append(NSAttributedString(string: text + "\n", attributes: attributes))
                 
+            } else if line.hasPrefix("#### ") {
+                // H4
+                let text = String(line.dropFirst(5))
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.boldSystemFont(ofSize: 12),
+                    .paragraphStyle: createParagraphStyle(spaceBefore: 3, spaceAfter: 3)
+                ]
+                result.append(NSAttributedString(string: text + "\n", attributes: attributes))
+                
             } else if line.hasPrefix("- ") || line.hasPrefix("• ") {
                 // Bullet point
                 let text = String(line.dropFirst(2))
@@ -124,7 +103,10 @@ struct RTFDocumentService {
                 
                 var attrs = defaultAttributes
                 attrs[.paragraphStyle] = paragraphStyle
-                result.append(NSAttributedString(string: "•\t" + text + "\n", attributes: attrs))
+                
+                let formatted = parseInlineFormatting("• \t" + text, defaultAttributes: attrs)
+                result.append(formatted)
+                result.append(NSAttributedString(string: "\n"))
                 
             } else if line.range(of: "^\\d+\\. ", options: .regularExpression) != nil {
                 // Numbered list
@@ -139,7 +121,10 @@ struct RTFDocumentService {
                 
                 var attrs = defaultAttributes
                 attrs[.paragraphStyle] = paragraphStyle
-                result.append(NSAttributedString(string: "\(number).\t\(text)\n", attributes: attrs))
+                
+                let formatted = parseInlineFormatting("\(number).\t\(text)", defaultAttributes: attrs)
+                result.append(formatted)
+                result.append(NSAttributedString(string: "\n"))
                 
             } else {
                 // Regular paragraph with inline formatting
@@ -153,70 +138,204 @@ struct RTFDocumentService {
     }
     
     private func parseInlineFormatting(_ text: String, defaultAttributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
+        var workingText = text
         let result = NSMutableAttributedString()
-        let currentText = text
         
-        // Pattern matching for inline formats
-        let patterns: [(pattern: String, apply: (NSMutableAttributedString) -> Void)] = [
+        // Process in order: hyperlinks first, then other formatting
+        
+        // 1. Process hyperlinks [text](url)
+        let hyperlinkPattern = #"\[([^\]]+)\]\(([^)]+)\)"#
+        if let hyperlinkRegex = try? NSRegularExpression(pattern: hyperlinkPattern) {
+            let matches = hyperlinkRegex.matches(in: workingText, range: NSRange(workingText.startIndex..., in: workingText))
+            
+            var lastEnd = workingText.startIndex
+            
+            for match in matches.reversed() {
+                if let totalRange = Range(match.range, in: workingText),
+                   let textRange = Range(match.range(at: 1), in: workingText),
+                   let urlRange = Range(match.range(at: 2), in: workingText) {
+                    
+                    // Add text before the link
+                    let beforeText = String(workingText[lastEnd..<totalRange.lowerBound])
+                    let formattedBefore = applyBasicFormatting(beforeText, defaultAttributes: defaultAttributes)
+                    result.append(formattedBefore)
+                    
+                    // Create the hyperlink
+                    let linkText = String(workingText[textRange])
+                    let urlString = String(workingText[urlRange])
+                    
+                    if let url = URL(string: urlString) {
+                        let linkAttrs = NSMutableAttributedString(string: linkText, attributes: defaultAttributes)
+                        linkAttrs.addAttribute(.link, value: url, range: NSRange(location: 0, length: linkText.count))
+                        linkAttrs.addAttribute(.foregroundColor, value: NSColor.blue, range: NSRange(location: 0, length: linkText.count))
+                        linkAttrs.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: linkText.count))
+                        result.append(linkAttrs)
+                    } else {
+                        // If URL is invalid, just add the text
+                        result.append(NSAttributedString(string: linkText, attributes: defaultAttributes))
+                    }
+                    
+                    lastEnd = totalRange.upperBound
+                }
+            }
+            
+            // Add remaining text
+            if lastEnd < workingText.endIndex {
+                let remainingText = String(workingText[lastEnd...])
+                let formattedRemaining = applyBasicFormatting(remainingText, defaultAttributes: defaultAttributes)
+                result.append(formattedRemaining)
+            }
+            
+            return result
+        }
+        
+        // If no hyperlinks, just apply basic formatting
+        return applyBasicFormatting(text, defaultAttributes: defaultAttributes)
+    }
+    
+    private func applyBasicFormatting(_ text: String, defaultAttributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
+        var workingText = text
+        let result = NSMutableAttributedString()
+        
+        // Define all formatting patterns
+        struct FormatPattern {
+            let pattern: String
+            let startDelimiter: String
+            let endDelimiter: String
+            let apply: (NSMutableAttributedString) -> Void
+        }
+        
+        let patterns = [
             // Bold
-            (#"\*\*(.+?)\*\*"#, { str in
+            FormatPattern(pattern: #"\*\*(.+?)\*\*"#, startDelimiter: "**", endDelimiter: "**", apply: { str in
                 str.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 12), 
                                range: NSRange(location: 0, length: str.length))
             }),
-            // Italic
-            (#"\*(.+?)\*"#, { str in
+            
+            // Italic (careful not to match bold)
+            FormatPattern(pattern: #"(?<!\*)\*([^\*]+?)\*(?!\*)"#, startDelimiter: "*", endDelimiter: "*", apply: { str in
                 let italicFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 12), toHaveTrait: .italicFontMask)
-                str.addAttribute(.font, value: italicFont,
+                str.addAttribute(.font, value: italicFont, range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Strikethrough
+            FormatPattern(pattern: #"~~(.+?)~~"#, startDelimiter: "~~", endDelimiter: "~~", apply: { str in
+                str.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue,
                                range: NSRange(location: 0, length: str.length))
             }),
-            // Highlight
-            (#"==(.+?)=="#, { str in
+            
+            // Yellow highlight
+            FormatPattern(pattern: #"==(.+?)=="#, startDelimiter: "==", endDelimiter: "==", apply: { str in
                 str.addAttribute(.backgroundColor, value: NSColor.yellow,
                                range: NSRange(location: 0, length: str.length))
             }),
-            // Strikethrough
-            (#"~~(.+?)~~"#, { str in
-                str.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue,
+            
+            // Green highlight
+            FormatPattern(pattern: #"\{\{(.+?)\}\}"#, startDelimiter: "{{", endDelimiter: "}}", apply: { str in
+                str.addAttribute(.backgroundColor, value: NSColor.green,
+                               range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Blue highlight
+            FormatPattern(pattern: #"\[\[(.+?)\]\]"#, startDelimiter: "[[", endDelimiter: "]]", apply: { str in
+                str.addAttribute(.backgroundColor, value: NSColor.cyan,
+                               range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Orange highlight
+            FormatPattern(pattern: #"\(\((.+?)\)\)"#, startDelimiter: "((", endDelimiter: "))", apply: { str in
+                str.addAttribute(.backgroundColor, value: NSColor.orange,
+                               range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Red text
+            FormatPattern(pattern: #"\{red\}(.+?)\{/red\}"#, startDelimiter: "{red}", endDelimiter: "{/red}", apply: { str in
+                str.addAttribute(.foregroundColor, value: NSColor.red,
+                               range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Blue text
+            FormatPattern(pattern: #"\{blue\}(.+?)\{/blue\}"#, startDelimiter: "{blue}", endDelimiter: "{/blue}", apply: { str in
+                str.addAttribute(.foregroundColor, value: NSColor.blue,
+                               range: NSRange(location: 0, length: str.length))
+            }),
+            
+            // Green text
+            FormatPattern(pattern: #"\{green\}(.+?)\{/green\}"#, startDelimiter: "{green}", endDelimiter: "{/green}", apply: { str in
+                str.addAttribute(.foregroundColor, value: NSColor.green,
                                range: NSRange(location: 0, length: str.length))
             })
         ]
         
-        // Process patterns
-        var lastEnd = currentText.startIndex
+        // Track processed ranges to avoid overlapping
+        var processedRanges: [NSRange] = []
         
-        for (pattern, applyFormat) in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern) {
-                let matches = regex.matches(in: currentText, 
-                                          range: NSRange(currentText.startIndex..., in: currentText))
+        // Process each pattern
+        for formatPattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: formatPattern.pattern) {
+                let matches = regex.matches(in: workingText, range: NSRange(workingText.startIndex..., in: workingText))
                 
                 for match in matches {
-                    // Add text before match
-                    if let range = Range(match.range, in: currentText) {
-                        let beforeText = String(currentText[lastEnd..<range.lowerBound])
-                        result.append(NSAttributedString(string: beforeText, attributes: defaultAttributes))
+                    // Skip if this range overlaps with already processed ranges
+                    let matchRange = match.range
+                    if processedRanges.contains(where: { $0.intersection(matchRange) != nil }) {
+                        continue
+                    }
+                    
+                    processedRanges.append(matchRange)
+                }
+            }
+        }
+        
+        // Sort processed ranges by location
+        processedRanges.sort { $0.location < $1.location }
+        
+        // Apply formatting
+        var currentIndex = workingText.startIndex
+        
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern.pattern) {
+                let matches = regex.matches(in: workingText, range: NSRange(workingText.startIndex..., in: workingText))
+                
+                for match in matches {
+                    if let captureRange = Range(match.range(at: 1), in: workingText) {
+                        let capturedText = String(workingText[captureRange])
                         
-                        // Add formatted text
-                        if let captureRange = Range(match.range(at: 1), in: currentText) {
-                            let capturedText = String(currentText[captureRange])
-                            let formattedString = NSMutableAttributedString(string: capturedText, 
-                                                                          attributes: defaultAttributes)
-                            applyFormat(formattedString)
-                            result.append(formattedString)
+                        // Find this match in the original text
+                        if let range = workingText.range(of: pattern.startDelimiter + capturedText + pattern.endDelimiter) {
+                            workingText.replaceSubrange(range, with: capturedText)
                         }
-                        
-                        lastEnd = range.upperBound
                     }
                 }
             }
         }
         
-        // Add remaining text
-        if lastEnd < currentText.endIndex {
-            let remainingText = String(currentText[lastEnd...])
-            result.append(NSAttributedString(string: remainingText, attributes: defaultAttributes))
+        // Now apply the formatting to the cleaned text
+        result.append(NSMutableAttributedString(string: workingText, attributes: defaultAttributes))
+        
+        // Apply formatting based on the original patterns
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern.pattern) {
+                let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+                
+                for match in matches {
+                    if let captureRange = Range(match.range(at: 1), in: text) {
+                        let capturedText = String(text[captureRange])
+                        
+                        // Find where this text appears in our result
+                        let searchRange = NSRange(location: 0, length: result.length)
+                        let resultString = result.string
+                        
+                        if let range = resultString.range(of: capturedText) {
+                            let nsRange = NSRange(range, in: resultString)
+                            pattern.apply(result.attributedSubstring(from: nsRange) as! NSMutableAttributedString)
+                        }
+                    }
+                }
+            }
         }
         
-        return result.length > 0 ? result : NSMutableAttributedString(string: text, attributes: defaultAttributes)
+        return result
     }
     
     private func createParagraphStyle(alignment: NSTextAlignment = .left, 
@@ -242,61 +361,21 @@ struct RTFDocumentService {
                 .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
                 .foregroundColor: NSColor.darkGray
             ]
+        case "meeting":
+            return [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.black,
+                .paragraphStyle: {
+                    let style = NSMutableParagraphStyle()
+                    style.lineSpacing = 1.5
+                    return style
+                }()
+            ]
         default:
             return [
                 .font: NSFont.systemFont(ofSize: 12),
                 .foregroundColor: NSColor.black
             ]
-        }
-    }
-    
-    private func applyFormat(to attributedString: NSMutableAttributedString, format: [String: Any]) {
-        guard let type = format["type"] as? String else { return }
-        
-        // Get range
-        let start = format["start"] as? Int ?? 0
-        let length = format["length"] as? Int ?? 0
-        let range = NSRange(location: start, length: length)
-        
-        // Validate range
-        guard range.location + range.length <= attributedString.length else { return }
-        
-        switch type {
-        case "highlight":
-            if let colorName = format["color"] as? String,
-               let color = colorFromName(colorName) {
-                attributedString.addAttribute(.backgroundColor, value: color, range: range)
-            }
-            
-        case "color":
-            if let colorName = format["color"] as? String,
-               let color = colorFromName(colorName) {
-                attributedString.addAttribute(.foregroundColor, value: color, range: range)
-            }
-            
-        case "bold":
-            attributedString.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 12), range: range)
-            
-        case "italic":
-            let italicFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 12), toHaveTrait: .italicFontMask)
-            attributedString.addAttribute(.font, value: italicFont, range: range)
-            
-        default:
-            break
-        }
-    }
-    
-    private func colorFromName(_ name: String) -> NSColor? {
-        switch name.lowercased() {
-        case "yellow": return .yellow
-        case "red": return .red
-        case "green": return .green
-        case "blue": return .blue
-        case "orange": return .orange
-        case "purple": return .purple
-        case "lightblue": return .cyan
-        case "lightgreen": return NSColor(red: 0.5, green: 1.0, blue: 0.5, alpha: 1.0)
-        default: return nil
         }
     }
 }
