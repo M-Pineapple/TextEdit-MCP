@@ -41,7 +41,7 @@ class MCPServer {
     
     private func readMessage(from input: FileHandle) async throws -> [String: Any]? {
         // Read line from stdin
-        guard let data = try input.availableData.isEmpty ? nil : input.availableData,
+        guard let data = input.availableData.isEmpty ? nil : input.availableData,
               let line = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !line.isEmpty else {
             return nil
@@ -203,4 +203,5 @@ enum MCPError: Error {
     case invalidParameters
     case unknownTool(String)
     case encodingError
+    case messageTooLarge
 }

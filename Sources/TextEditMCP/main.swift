@@ -8,10 +8,5 @@
 import Foundation
 
 // Start the MCP server
-@main
-struct TextEditMCP {
-    static func main() async {
-        let server = MCPServer()
-        await server.start()
-    }
-}
+let server = MCPServer()
+await server.start()

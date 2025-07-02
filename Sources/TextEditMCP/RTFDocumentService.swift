@@ -122,20 +122,24 @@ struct RTFDocumentService {
                 paragraphStyle.headIndent = 20
                 paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: 20)]
                 
-                result.append(NSAttributedString(string: "•\t" + text + "\n", 
-                                               attributes: [.paragraphStyle: paragraphStyle] + defaultAttributes))
+                var attrs = defaultAttributes
+                attrs[.paragraphStyle] = paragraphStyle
+                result.append(NSAttributedString(string: "•\t" + text + "\n", attributes: attrs))
                 
-            } else if let match = line.firstMatch(of: /^(\d+)\. (.+)$/) {
+            } else if line.range(of: "^\\d+\\. ", options: .regularExpression) != nil {
                 // Numbered list
-                let number = String(match.1)
-                let text = String(match.2)
+                let components = line.components(separatedBy: ". ")
+                guard components.count >= 2 else { continue }
+                let number = components[0]
+                let text = components.dropFirst().joined(separator: ". ")
                 let paragraphStyle = NSMutableParagraphStyle()
                 paragraphStyle.firstLineHeadIndent = 0
                 paragraphStyle.headIndent = 20
                 paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: 20)]
                 
-                result.append(NSAttributedString(string: "\(number).\t\(text)\n",
-                                               attributes: [.paragraphStyle: paragraphStyle] + defaultAttributes))
+                var attrs = defaultAttributes
+                attrs[.paragraphStyle] = paragraphStyle
+                result.append(NSAttributedString(string: "\(number).\t\(text)\n", attributes: attrs))
                 
             } else {
                 // Regular paragraph with inline formatting
@@ -150,7 +154,7 @@ struct RTFDocumentService {
     
     private func parseInlineFormatting(_ text: String, defaultAttributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
-        var currentText = text
+        let currentText = text
         
         // Pattern matching for inline formats
         let patterns: [(pattern: String, apply: (NSMutableAttributedString) -> Void)] = [
@@ -161,7 +165,8 @@ struct RTFDocumentService {
             }),
             // Italic
             (#"\*(.+?)\*"#, { str in
-                str.addAttribute(.font, value: NSFont.italicSystemFont(ofSize: 12),
+                let italicFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 12), toHaveTrait: .italicFontMask)
+                str.addAttribute(.font, value: italicFont,
                                range: NSRange(location: 0, length: str.length))
             }),
             // Highlight
@@ -273,7 +278,8 @@ struct RTFDocumentService {
             attributedString.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 12), range: range)
             
         case "italic":
-            attributedString.addAttribute(.font, value: NSFont.italicSystemFont(ofSize: 12), range: range)
+            let italicFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 12), toHaveTrait: .italicFontMask)
+            attributedString.addAttribute(.font, value: italicFont, range: range)
             
         default:
             break
