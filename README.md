@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to create beau
 
 - 📝 **Rich Text Formatting**
   - Bold, italic, underline, strikethrough
-  - Headings (H1-H4)
+  - Headings (H1-H2)
   - Paragraph formatting with customizable spacing
 
 - 🎨 **Colors & Highlighting**
