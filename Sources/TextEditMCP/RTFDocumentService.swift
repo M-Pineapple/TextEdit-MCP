@@ -56,8 +56,18 @@ struct RTFDocumentService {
         // Apply template defaults
         let defaultAttributes = getTemplateAttributes(template)
         
-        for line in lines {
-            if line.hasPrefix("# ") {
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            
+            // Check for table
+            if isTableStart(line) && i + 1 < lines.count && isTableSeparator(lines[i + 1]) {
+                // Parse the table
+                let tableResult = parseTable(from: lines, startingAt: i, defaultAttributes: defaultAttributes)
+                result.append(tableResult.attributedString)
+                i = tableResult.nextLineIndex
+                
+            } else if line.hasPrefix("# ") {
                 // H1
                 let text = String(line.dropFirst(2))
                 let attributes: [NSAttributedString.Key: Any] = [
@@ -65,6 +75,7 @@ struct RTFDocumentService {
                     .paragraphStyle: createParagraphStyle(alignment: .center, spaceBefore: 0, spaceAfter: 12)
                 ]
                 result.append(NSAttributedString(string: text + "\n", attributes: attributes))
+                i += 1
                 
             } else if line.hasPrefix("## ") {
                 // H2
@@ -74,6 +85,7 @@ struct RTFDocumentService {
                     .paragraphStyle: createParagraphStyle(spaceBefore: 12, spaceAfter: 6)
                 ]
                 result.append(NSAttributedString(string: text + "\n", attributes: attributes))
+                i += 1
                 
             } else if line.hasPrefix("### ") {
                 // H3
@@ -83,6 +95,7 @@ struct RTFDocumentService {
                     .paragraphStyle: createParagraphStyle(spaceBefore: 6, spaceAfter: 3)
                 ]
                 result.append(NSAttributedString(string: text + "\n", attributes: attributes))
+                i += 1
                 
             } else if line.hasPrefix("#### ") {
                 // H4
@@ -92,6 +105,7 @@ struct RTFDocumentService {
                     .paragraphStyle: createParagraphStyle(spaceBefore: 3, spaceAfter: 3)
                 ]
                 result.append(NSAttributedString(string: text + "\n", attributes: attributes))
+                i += 1
                 
             } else if line.hasPrefix("- ") || line.hasPrefix("• ") {
                 // Bullet point
@@ -107,11 +121,15 @@ struct RTFDocumentService {
                 let formatted = parseInlineFormatting("• \t" + text, defaultAttributes: attrs)
                 result.append(formatted)
                 result.append(NSAttributedString(string: "\n"))
+                i += 1
                 
             } else if line.range(of: "^\\d+\\. ", options: .regularExpression) != nil {
                 // Numbered list
                 let components = line.components(separatedBy: ". ")
-                guard components.count >= 2 else { continue }
+                guard components.count >= 2 else { 
+                    i += 1
+                    continue 
+                }
                 let number = components[0]
                 let text = components.dropFirst().joined(separator: ". ")
                 let paragraphStyle = NSMutableParagraphStyle()
@@ -125,16 +143,129 @@ struct RTFDocumentService {
                 let formatted = parseInlineFormatting("\(number).\t\(text)", defaultAttributes: attrs)
                 result.append(formatted)
                 result.append(NSAttributedString(string: "\n"))
+                i += 1
                 
             } else {
                 // Regular paragraph with inline formatting
                 let formatted = parseInlineFormatting(line, defaultAttributes: defaultAttributes)
                 result.append(formatted)
                 result.append(NSAttributedString(string: "\n"))
+                i += 1
             }
         }
         
         return result
+    }
+    
+    // Check if a line looks like a table start (has pipes)
+    private func isTableStart(_ line: String) -> Bool {
+        return line.contains("|") && line.trimmingCharacters(in: .whitespaces).first == "|"
+    }
+    
+    // Check if a line is a table separator (|---|---|)
+    private func isTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.contains("|") && trimmed.contains("-") && 
+               trimmed.replacingOccurrences(of: "|", with: "")
+                     .replacingOccurrences(of: "-", with: "")
+                     .replacingOccurrences(of: " ", with: "")
+                     .replacingOccurrences(of: ":", with: "").isEmpty
+    }
+    
+    // Parse a markdown table
+    private func parseTable(from lines: [String], startingAt startIndex: Int, defaultAttributes: [NSAttributedString.Key: Any]) -> (attributedString: NSMutableAttributedString, nextLineIndex: Int) {
+        let result = NSMutableAttributedString()
+        var tableData: [[String]] = []
+        var currentIndex = startIndex
+        
+        // Parse header
+        if currentIndex < lines.count {
+            let headerCells = parseTableRow(lines[currentIndex])
+            tableData.append(headerCells)
+            currentIndex += 1
+        }
+        
+        // Skip separator
+        if currentIndex < lines.count && isTableSeparator(lines[currentIndex]) {
+            currentIndex += 1
+        }
+        
+        // Parse data rows
+        while currentIndex < lines.count && isTableStart(lines[currentIndex]) {
+            let rowCells = parseTableRow(lines[currentIndex])
+            tableData.append(rowCells)
+            currentIndex += 1
+        }
+        
+        // Create NSTextTable
+        let table = NSTextTable()
+        let numColumns = tableData.first?.count ?? 0
+        table.numberOfColumns = numColumns
+        
+        // Create cells
+        for (rowIndex, row) in tableData.enumerated() {
+            for (colIndex, cellText) in row.enumerated() {
+                // Skip if column index exceeds the table columns
+                if colIndex >= numColumns { continue }
+                
+                let textBlock = NSTextTableBlock(table: table, 
+                                                startingRow: rowIndex, 
+                                                rowSpan: 1, 
+                                                startingColumn: colIndex, 
+                                                columnSpan: 1)
+                
+                // Style header row differently
+                textBlock.backgroundColor = rowIndex == 0 ? NSColor.lightGray.withAlphaComponent(0.3) : NSColor.clear
+                
+                // Set borders
+                textBlock.setBorderColor(NSColor.black, for: .minX)
+                textBlock.setBorderColor(NSColor.black, for: .maxX)
+                textBlock.setBorderColor(NSColor.black, for: .minY)
+                textBlock.setBorderColor(NSColor.black, for: .maxY)
+                
+                // Set border width
+                textBlock.setWidth(1.0, type: .absoluteValueType, for: .border, edge: .minX)
+                textBlock.setWidth(1.0, type: .absoluteValueType, for: .border, edge: .maxX)
+                textBlock.setWidth(1.0, type: .absoluteValueType, for: .border, edge: .minY)
+                textBlock.setWidth(1.0, type: .absoluteValueType, for: .border, edge: .maxY)
+                
+                // Set padding
+                textBlock.setWidth(5.0, type: .absoluteValueType, for: .padding, edge: .minX)
+                textBlock.setWidth(5.0, type: .absoluteValueType, for: .padding, edge: .maxX)
+                textBlock.setWidth(5.0, type: .absoluteValueType, for: .padding, edge: .minY)
+                textBlock.setWidth(5.0, type: .absoluteValueType, for: .padding, edge: .maxY)
+                
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.textBlocks = [textBlock]
+                paragraphStyle.alignment = .center
+                
+                var cellAttributes = defaultAttributes
+                cellAttributes[.paragraphStyle] = paragraphStyle
+                cellAttributes[.font] = rowIndex == 0 ? NSFont.boldSystemFont(ofSize: 12) : defaultAttributes[.font] ?? NSFont.systemFont(ofSize: 12)
+                
+                // Parse inline formatting for the cell text
+                let formattedCell = parseInlineFormatting(cellText.trimmingCharacters(in: .whitespaces), defaultAttributes: cellAttributes)
+                result.append(formattedCell)
+                result.append(NSAttributedString(string: "\n", attributes: cellAttributes))
+            }
+        }
+        
+        return (result, currentIndex)
+    }
+    
+    // Parse a table row into cells
+    private func parseTableRow(_ row: String) -> [String] {
+        // Remove leading and trailing pipes
+        var cleanRow = row.trimmingCharacters(in: .whitespaces)
+        if cleanRow.hasPrefix("|") {
+            cleanRow = String(cleanRow.dropFirst())
+        }
+        if cleanRow.hasSuffix("|") {
+            cleanRow = String(cleanRow.dropLast())
+        }
+        
+        // Split by pipe and clean each cell
+        return cleanRow.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
     
     private func parseInlineFormatting(_ text: String, defaultAttributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
@@ -208,13 +339,18 @@ struct RTFDocumentService {
         let patterns = [
             // Bold
             FormatPattern(pattern: #"\*\*(.+?)\*\*"#, startDelimiter: "**", endDelimiter: "**", apply: { str in
-                str.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 12), 
+                // Get existing font size
+                let existingFont = str.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+                let fontSize = existingFont?.pointSize ?? 12
+                str.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: fontSize), 
                                range: NSRange(location: 0, length: str.length))
             }),
             
             // Italic (careful not to match bold)
             FormatPattern(pattern: #"(?<!\*)\*([^\*]+?)\*(?!\*)"#, startDelimiter: "*", endDelimiter: "*", apply: { str in
-                let italicFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 12), toHaveTrait: .italicFontMask)
+                // Get existing font
+                let existingFont = str.attribute(.font, at: 0, effectiveRange: nil) as? NSFont ?? NSFont.systemFont(ofSize: 12)
+                let italicFont = NSFontManager.shared.convert(existingFont, toHaveTrait: .italicFontMask)
                 str.addAttribute(.font, value: italicFont, range: NSRange(location: 0, length: str.length))
             }),
             
@@ -326,9 +462,18 @@ struct RTFDocumentService {
                         let searchRange = NSRange(location: 0, length: result.length)
                         let resultString = result.string
                         
-                        if let range = resultString.range(of: capturedText) {
+                        if !capturedText.isEmpty, let range = resultString.range(of: capturedText) {
                             let nsRange = NSRange(range, in: resultString)
-                            pattern.apply(result.attributedSubstring(from: nsRange) as! NSMutableAttributedString)
+                            // Ensure range is valid
+                            if nsRange.location + nsRange.length <= result.length {
+                                // Create a mutable copy of the substring
+                                let mutableSubstring = NSMutableAttributedString(attributedString: result.attributedSubstring(from: nsRange))
+                                if mutableSubstring.length > 0 {
+                                    pattern.apply(mutableSubstring)
+                                    // Replace the range in the original with the formatted version
+                                    result.replaceCharacters(in: nsRange, with: mutableSubstring)
+                                }
+                            }
                         }
                     }
                 }

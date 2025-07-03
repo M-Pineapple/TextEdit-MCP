@@ -1,7 +1,21 @@
-.DS_Store
+# Swift
 .build/
-*.xcodeproj
-Package.resolved
 .swiftpm/
-DerivedData/
-*.xcuserstate
+Package.resolved
+*.xcodeproj
+
+# macOS
+.DS_Store
+
+# Development
+dev-tests/
+*.log
+*.tmp
+*.backup
+
+# IDE
+.vscode/
+.idea/
+
+# Build outputs
+*.rtf

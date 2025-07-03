@@ -10,53 +10,35 @@ import Foundation
 class MCPServer {
     private let rtfService = RTFDocumentService()
     private let logger = MCPLogger()
+    private let input = FileHandle.standardInput
+    private let output = FileHandle.standardOutput
     
     func start() async {
-        // Initialize stdio transport
-        let input = FileHandle.standardInput
-        let output = FileHandle.standardOutput
-        
         logger.info("TextEdit MCP Server started")
         
-        // Process messages continuously
-        await processMessages(input: input, output: output)
+        // Main message loop
+        await runEventLoop()
     }
     
-    private func processMessages(input: FileHandle, output: FileHandle) async {
+    private func runEventLoop() async {
         var buffer = ""
         
         while true {
-            autoreleasepool {
-                // Read available data
-                let data = input.availableData
+            // Read from stdin line by line
+            if let line = readLine() {
+                logger.debug("Received line: \(line)")
                 
-                if data.isEmpty {
-                    // No more data, exit gracefully
-                    logger.info("No more data, shutting down")
-                    return
-                }
-                
-                // Append to buffer
-                if let str = String(data: data, encoding: .utf8) {
-                    buffer += str
-                    
-                    // Process complete lines
-                    while let lineRange = buffer.range(of: "\n") {
-                        let line = String(buffer[..<lineRange.lowerBound])
-                        buffer.removeSubrange(...lineRange.lowerBound)
-                        
-                        if !line.isEmpty {
-                            Task {
-                                await processLine(line, output: output)
-                            }
-                        }
-                    }
-                }
+                // Process the line
+                await processLine(line)
+            } else {
+                // EOF reached, exit
+                logger.info("EOF reached, exiting")
+                break
             }
         }
     }
     
-    private func processLine(_ line: String, output: FileHandle) async {
+    private func processLine(_ line: String) async {
         do {
             // Parse JSON
             guard let jsonData = line.data(using: .utf8),
@@ -69,7 +51,7 @@ class MCPServer {
             let response = try await processMessage(message)
             
             // Send response
-            try await sendMessage(response, to: output)
+            try await sendMessage(response)
             
         } catch {
             logger.error("Error processing line: \(error)")
@@ -91,13 +73,21 @@ class MCPServer {
         switch method {
         case "initialize":
             return createResponse(id: id, result: [
-                "protocolVersion": "1.0",
-                "serverName": "TextEdit MCP",
-                "serverVersion": "1.0.0",
+                "protocolVersion": "2024-11-05",
+                "serverInfo": [
+                    "name": "textedit-mcp",
+                    "version": "1.0.0"
+                ],
                 "capabilities": [
-                    "tools": true
+                    "tools": [:],
+                    "prompts": [:],
+                    "resources": [:]
                 ]
             ])
+            
+        case "notifications/initialized":
+            // This is just a notification, no response needed
+            return [:]
             
         case "tools/list":
             return createResponse(id: id, result: [
@@ -129,11 +119,21 @@ class MCPServer {
                 ]
             ])
             
+        case "resources/list":
+            // Return empty resources list
+            return createResponse(id: id, result: ["resources": []])
+            
         case "tools/call":
             return try await executeTool(params: params, id: id)
             
         default:
-            throw MCPError.unknownMethod(method)
+            // Log unhandled methods but don't crash
+            logger.debug("Unhandled method: \(method)")
+            if id != nil {
+                // Only respond if there's an ID (it's a request, not a notification)
+                return createResponse(id: id, result: [:])
+            }
+            return [:]
         }
     }
     
@@ -173,7 +173,12 @@ class MCPServer {
         }
     }
     
-    private func sendMessage(_ message: [String: Any], to output: FileHandle) async throws {
+    private func sendMessage(_ message: [String: Any]) async throws {
+        // Don't send empty messages (for notifications)
+        if message.isEmpty {
+            return
+        }
+        
         let data = try JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])
         guard let jsonString = String(data: data, encoding: .utf8) else {
             throw MCPError.encodingError

@@ -30,5 +30,10 @@ struct MCPLogger {
         if let data = logMessage.data(using: .utf8) {
             FileHandle.standardError.write(data)
         }
+        
+        // Also write to system log for debugging
+        #if DEBUG
+        NSLog("TextEditMCP [\(level)]: \(message)")
+        #endif
     }
 }
