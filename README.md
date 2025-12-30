@@ -203,6 +203,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Add tests for new features
 4. Update documentation
 
+## Support
+
+If you find this tool useful, consider supporting development:
+
+<a href="https://www.buymeacoffee.com/mpineapple" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
 ## License
 
 MIT License - See LICENSE file for details
