@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400" height="400" viewBox="0 0 400 400"
+     xmlns="http://www.w3.org/2000/svg"
+     role="img"
+     aria-label="TextEdit MCP — RTF document creation for Claude">
+  <title>TextEdit MCP</title>
+
+  <defs>
+    <linearGradient id="window" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="titlebar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="paper" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#fefce8"/>
+      <stop offset="100%" stop-color="#fef3c7"/>
+    </linearGradient>
+
+    <linearGradient id="heading" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+
+    <!-- Yellow highlight band for animated sweep -->
+    <linearGradient id="hilite" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#fde68a" stop-opacity="0"/>
+      <stop offset="40%"  stop-color="#fbbf24" stop-opacity="0.6"/>
+      <stop offset="60%"  stop-color="#fbbf24" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#fde68a" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Clip path so the highlight sweep stays inside the page -->
+    <clipPath id="page-clip">
+      <rect x="0" y="0" width="240" height="200" rx="8"/>
+    </clipPath>
+  </defs>
+
+  <!-- Drop shadow -->
+  <rect x="22" y="44" width="356" height="316" rx="22" fill="#000" opacity="0.18"/>
+
+  <!-- Terminal window -->
+  <rect x="20" y="40" width="360" height="320" rx="22"
+        fill="url(#window)" stroke="#334155" stroke-width="1"/>
+
+  <!-- Title bar -->
+  <path d="M 20,62 Q 20,40 42,40 L 358,40 Q 380,40 380,62 L 380,82 L 20,82 Z"
+        fill="url(#titlebar)" opacity="0.7"/>
+  <line x1="20" y1="82" x2="380" y2="82" stroke="#0b1220" stroke-width="1"/>
+
+  <!-- Traffic lights -->
+  <circle cx="42" cy="61" r="6" fill="#ef4444"/>
+  <circle cx="62" cy="61" r="6" fill="#eab308"/>
+  <circle cx="82" cy="61" r="6" fill="#22c55e"/>
+
+  <!-- Title text -->
+  <text x="200" y="66" text-anchor="middle"
+        font-family="ui-monospace, 'SF Mono', Menlo, Monaco, monospace"
+        font-size="11" font-weight="600" fill="#64748b">textedit</text>
+
+  <!-- Document/page (centered, 240x200 at offset 80,105) -->
+  <g transform="translate(80, 105)">
+    <!-- Paper drop shadow -->
+    <rect x="3" y="5" width="240" height="200" rx="8" fill="#000" opacity="0.25"/>
+
+    <!-- Page contents are clipped to page bounds so highlight sweep stays inside -->
+    <g clip-path="url(#page-clip)">
+      <!-- Paper -->
+      <rect x="0" y="0" width="240" height="200" fill="url(#paper)"/>
+
+      <!-- Format toolbar -->
+      <g transform="translate(16, 14)">
+        <text x="0" y="10" font-family="Georgia, 'Times New Roman', serif"
+              font-size="13" font-weight="900" fill="#1e293b">B</text>
+        <text x="20" y="10" font-family="Georgia, 'Times New Roman', serif"
+              font-size="13" font-weight="500" font-style="italic" fill="#1e293b">I</text>
+        <text x="36" y="10" font-family="Georgia, 'Times New Roman', serif"
+              font-size="13" font-weight="500" fill="#1e293b" text-decoration="underline">U</text>
+        <circle cx="74" cy="6" r="4" fill="#ef4444"/>
+        <circle cx="86" cy="6" r="4" fill="#3b82f6"/>
+        <circle cx="98" cy="6" r="4" fill="#22c55e"/>
+      </g>
+
+      <!-- Heading bar -->
+      <rect x="16" y="38" width="170" height="14" rx="2" fill="url(#heading)"/>
+
+      <!-- Body text lines (always visible) -->
+      <rect x="16" y="64" width="208" height="6" rx="2" fill="#475569"/>
+      <rect x="16" y="78" width="190" height="6" rx="2" fill="#475569"/>
+      <rect x="16" y="92" width="200" height="6" rx="2" fill="#475569"/>
+
+      <!-- Bullet list -->
+      <circle cx="22" cy="115" r="2" fill="#475569"/>
+      <rect x="32" y="113" width="170" height="5" rx="2" fill="#475569"/>
+      <circle cx="22" cy="129" r="2" fill="#475569"/>
+      <rect x="32" y="127" width="155" height="5" rx="2" fill="#475569"/>
+
+      <!-- Final partial line -->
+      <rect x="16" y="148" width="118" height="6" rx="2" fill="#475569"/>
+
+      <!-- Animated highlight sweep band (vertical bar moving left to right) -->
+      <rect x="-60" y="0" width="60" height="200" fill="url(#hilite)">
+        <animate attributeName="x" values="-60;240" dur="3s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <!-- Page border (drawn after clip group so it's on top of clipped content) -->
+    <rect x="0" y="0" width="240" height="200" rx="8" fill="none" stroke="#fef3c7" stroke-width="1" opacity="0.4"/>
+
+    <!-- Blinking text cursor at end of last line (outside clip so always sharp) -->
+    <rect x="138" y="146" width="2" height="10" fill="#1e293b">
+      <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Bottom prompt with pulsing cursor -->
+  <g transform="translate(40, 332)">
+    <text x="0" y="0" font-family="ui-monospace, 'SF Mono', Menlo, Monaco, monospace"
+          font-size="14" font-weight="600" fill="#fbbf24">&#x276F;</text>
+    <text x="20" y="0" font-family="ui-monospace, 'SF Mono', Menlo, Monaco, monospace"
+          font-size="13" font-weight="500" fill="#fef3c7">textedit</text>
+    <rect x="105" y="-12" width="9" height="14" fill="#fef3c7">
+      <animate attributeName="opacity" values="1;0;1" dur="1.1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+</svg>

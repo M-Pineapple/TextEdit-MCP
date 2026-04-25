@@ -1,4 +1,10 @@
+<div align="center">
+
+<img src="assets/logo.svg" alt="TextEdit MCP logo" width="240"/>
+
 # TextEdit MCP
+
+</div>
 
 A Model Context Protocol (MCP) server that enables Claude Desktop to create beautifully formatted RTF documents with native macOS TextEdit compatibility.
 
