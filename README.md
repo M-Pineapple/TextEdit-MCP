@@ -4,6 +4,10 @@
 
 # TextEdit MCP
 
+[![Licence: MIT](https://img.shields.io/github/license/M-Pineapple/TextEdit-MCP)](LICENSE)
+[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://www.swift.org)
+[![Stars](https://img.shields.io/github/stars/M-Pineapple/TextEdit-MCP)](https://github.com/M-Pineapple/TextEdit-MCP/stargazers)
+
 </div>
 
 A Model Context Protocol (MCP) server that enables Claude Desktop to create beautifully formatted RTF documents with native macOS TextEdit compatibility.
@@ -215,9 +219,21 @@ If you find this tool useful, consider supporting development:
 
 <a href="https://www.buymeacoffee.com/mpineapple" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
-## License
+## More MCP servers by M-Pineapple
 
-MIT License - See LICENSE file for details
+Other MCP servers in this portfolio:
+
+- [Claude Project Coordinator](https://github.com/M-Pineapple/Claude-Project-Coordinator). Track Xcode projects, status, tech stack and health.
+- [CryptoAnalysisMCP](https://github.com/M-Pineapple/CryptoAnalysisMCP). Cryptocurrency technical analysis for Claude Desktop.
+- [Warp Command Runner](https://github.com/M-Pineapple/warp-command-runner). Give any chat AI a real terminal.
+- [Msty Admin MCP](https://github.com/M-Pineapple/msty-admin-mcp). Administer Msty Studio Desktop.
+- [Member Berries](https://github.com/M-Pineapple/member-berries-apple-mcp). Apple Calendar, Notes and Reminders with personality.
+- [SeaShell](https://github.com/M-Pineapple/seashell). Talk to Claude from any terminal block.
+- [HubSpot Auditor](https://github.com/M-Pineapple/hubspot-auditor). Read-only HubSpot portal audit.
+
+## Licence
+
+MIT Licence. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
