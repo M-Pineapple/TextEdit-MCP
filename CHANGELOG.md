@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- `create_document` only writes a new `.rtf` file inside the home folder. Hidden path components and overwrites are refused.
-- Path checks resolve the deepest existing ancestor so a symlink such as `~/link/newdir/a.rtf` cannot write outside home when `newdir` does not exist.
+Document creation is limited to new `.rtf` files inside the home folder. Hidden folders, overwrites of existing files, and paths that would leave the home folder are refused.
+
+Please update to this release.
 
 ## [1.0.0] - 2025-01-03
 
