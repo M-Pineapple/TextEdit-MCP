@@ -45,6 +45,10 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to create beau
   - Technical (monospace)
   - Meeting (increased line spacing)
 
+- 🛡️ **Path guard**
+  - New `.rtf` files only, inside the home folder
+  - Hidden paths and overwrites are refused
+
 ## Installation
 
 ### Prerequisites
