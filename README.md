@@ -47,7 +47,7 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to create beau
 
 - 🛡️ **Path guard**
   - New `.rtf` files only, inside the home folder
-  - Hidden paths and overwrites are refused
+  - Hidden paths, overwrites, and symlinks that resolve outside home are refused
 
 ## Installation
 
