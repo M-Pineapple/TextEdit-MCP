@@ -21,6 +21,35 @@ struct RTFDocumentService {
         let message: String
     }
     
+    func resolvedCreateURL(from outputPath: String) -> (url: URL?, error: String?) {
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser.resolvingSymlinksInPath().standardizedFileURL
+        let expanded = (outputPath as NSString).expandingTildeInPath
+        var url = URL(fileURLWithPath: expanded).standardizedFileURL
+        let parent = url.deletingLastPathComponent()
+        if fileManager.fileExists(atPath: parent.path) {
+            url = parent.resolvingSymlinksInPath().standardizedFileURL.appendingPathComponent(url.lastPathComponent)
+        }
+        guard url.pathExtension.lowercased() == "rtf" else {
+            return (nil, "Output must be a new .rtf file")
+        }
+        let homePath = home.path
+        let prefix = homePath.hasSuffix("/") ? homePath : homePath + "/"
+        guard url.path.hasPrefix(prefix) else {
+            return (nil, "Output must be inside the home folder")
+        }
+        let relative = String(url.path.dropFirst(prefix.count))
+        for component in relative.split(separator: "/") {
+            if component.hasPrefix(".") {
+                return (nil, "Output must not use a hidden path")
+            }
+        }
+        if fileManager.fileExists(atPath: url.path) {
+            return (nil, "Refusing to overwrite an existing file")
+        }
+        return (url, nil)
+    }
+
     func createDocument(content: String, outputPath: String, template: String) async throws -> CreateResult {
         // Parse the content and create attributed string
         let attributedString = try parseContent(content, template: template)
@@ -33,17 +62,15 @@ struct RTFDocumentService {
             return CreateResult(success: false, path: "", message: "Failed to create RTF data")
         }
         
-        // Expand tilde in path
-        let expandedPath = NSString(string: outputPath).expandingTildeInPath
-        
-        // Create directory if needed
-        let directory = (expandedPath as NSString).deletingLastPathComponent
+        let resolved = resolvedCreateURL(from: outputPath)
+        guard let url = resolved.url else {
+            return CreateResult(success: false, path: "", message: resolved.error ?? "Invalid output path")
+        }
+        let directory = url.deletingLastPathComponent().path
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        
-        // Write to file
         do {
-            try rtfData.write(to: URL(fileURLWithPath: expandedPath))
-            return CreateResult(success: true, path: expandedPath, message: "Document created successfully")
+            try rtfData.write(to: url, options: .withoutOverwriting)
+            return CreateResult(success: true, path: url.path, message: "Document created successfully")
         } catch {
             return CreateResult(success: false, path: "", message: "Failed to write file: \(error)")
         }
