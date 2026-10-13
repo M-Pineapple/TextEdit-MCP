@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.0.1 - 2026-10-13
+
+Document creation is limited to new `.rtf` files inside the home folder. Hidden folders, overwrites of existing files, and paths that would leave the home folder are refused.
+
+Please update to this release.
+
+**Full Changelog**: https://github.com/M-Pineapple/TextEdit-MCP/compare/v1.0.0...v1.0.1
+
 ## v1.0.0 - Initial Release (2025-01-03)
 
 ### 🎉 Features
