@@ -91,4 +91,43 @@ final class RTFDocumentServiceTests: XCTestCase {
         let kept = try String(contentsOf: existing, encoding: .utf8)
         XCTAssertEqual(kept, "old")
     }
+
+    func testRefusesSymlinkEscapeThroughMissingIntermediateDirectory() async throws {
+        let service = RTFDocumentService()
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser
+        let outsideRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("textedit-mcp-escape-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: outsideRoot, withIntermediateDirectories: true)
+        let linkURL = home.appendingPathComponent("textedit-mcp-link-\(UUID().uuidString)")
+        defer {
+            try? fileManager.removeItem(at: linkURL)
+            try? fileManager.removeItem(at: outsideRoot)
+        }
+        try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: outsideRoot)
+
+        let outputPath = linkURL
+            .appendingPathComponent("newdir")
+            .appendingPathComponent("a.rtf")
+            .path
+
+        let resolved = service.resolvedCreateURL(from: outputPath)
+        XCTAssertNil(resolved.url)
+        XCTAssertTrue((resolved.error ?? "").lowercased().contains("home"))
+
+        let result = try await service.createDocument(
+            content: "x",
+            outputPath: outputPath,
+            template: "business"
+        )
+        XCTAssertFalse(result.success)
+        let escapedFile = outsideRoot.appendingPathComponent("newdir").appendingPathComponent("a.rtf")
+        XCTAssertFalse(fileManager.fileExists(atPath: escapedFile.path))
+
+        let nestedInsideHome = home
+            .appendingPathComponent("textedit-mcp-nested-\(UUID().uuidString)")
+            .appendingPathComponent("a.rtf")
+        let allowed = service.resolvedCreateURL(from: nestedInsideHome.path)
+        XCTAssertNotNil(allowed.url)
+    }
 }

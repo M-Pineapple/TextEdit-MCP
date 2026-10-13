@@ -26,19 +26,14 @@ struct RTFDocumentService {
         let home = fileManager.homeDirectoryForCurrentUser.resolvingSymlinksInPath().standardizedFileURL
         let expanded = (outputPath as NSString).expandingTildeInPath
         var url = URL(fileURLWithPath: expanded).standardizedFileURL
-        let parent = url.deletingLastPathComponent()
-        if fileManager.fileExists(atPath: parent.path) {
-            url = parent.resolvingSymlinksInPath().standardizedFileURL.appendingPathComponent(url.lastPathComponent)
-        }
+        url = destinationByResolvingExistingAncestors(url, fileManager: fileManager)
         guard url.pathExtension.lowercased() == "rtf" else {
             return (nil, "Output must be a new .rtf file")
         }
-        let homePath = home.path
-        let prefix = homePath.hasSuffix("/") ? homePath : homePath + "/"
-        guard url.path.hasPrefix(prefix) else {
+        guard isInsideHome(url, home: home) else {
             return (nil, "Output must be inside the home folder")
         }
-        let relative = String(url.path.dropFirst(prefix.count))
+        let relative = String(url.path.dropFirst(homePrefix(home).count))
         for component in relative.split(separator: "/") {
             if component.hasPrefix(".") {
                 return (nil, "Output must not use a hidden path")
@@ -66,14 +61,74 @@ struct RTFDocumentService {
         guard let url = resolved.url else {
             return CreateResult(success: false, path: "", message: resolved.error ?? "Invalid output path")
         }
-        let directory = url.deletingLastPathComponent().path
-        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let directory = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Re-check after mkdir so a swapped symlink cannot escape home.
+        let verified = resolvedCreateURL(from: url.path)
+        guard let writeURL = verified.url else {
+            return CreateResult(success: false, path: "", message: verified.error ?? "Invalid output path")
+        }
         do {
-            try rtfData.write(to: url, options: .withoutOverwriting)
-            return CreateResult(success: true, path: url.path, message: "Document created successfully")
+            try rtfData.write(to: writeURL, options: .withoutOverwriting)
+            return CreateResult(success: true, path: writeURL.path, message: "Document created successfully")
         } catch {
             return CreateResult(success: false, path: "", message: "Failed to write file: \(error)")
         }
+    }
+
+    /// Walk up to the deepest existing ancestor (including dangling symlinks),
+    /// resolve that ancestor, then re-append missing components. This catches
+    /// `~/link/newdir/a.rtf` when `~/link` points outside home and `newdir` does not exist.
+    private func destinationByResolvingExistingAncestors(_ url: URL, fileManager: FileManager) -> URL {
+        var ancestor = url.deletingLastPathComponent().standardizedFileURL
+        var missing: [String] = []
+        while !pathExistsOrIsSymlink(ancestor.path, fileManager: fileManager) {
+            let name = ancestor.lastPathComponent
+            let parent = ancestor.deletingLastPathComponent()
+            if parent.path == ancestor.path {
+                break
+            }
+            missing.insert(name, at: 0)
+            ancestor = parent
+        }
+        var resolved = resolvingSymlinksAllowingDangling(ancestor, fileManager: fileManager)
+        for component in missing {
+            resolved.appendPathComponent(component)
+        }
+        resolved.appendPathComponent(url.lastPathComponent)
+        return resolved.standardizedFileURL
+    }
+
+    private func pathExistsOrIsSymlink(_ path: String, fileManager: FileManager) -> Bool {
+        if fileManager.fileExists(atPath: path) {
+            return true
+        }
+        return (try? fileManager.destinationOfSymbolicLink(atPath: path)) != nil
+    }
+
+    private func resolvingSymlinksAllowingDangling(_ url: URL, fileManager: FileManager) -> URL {
+        if fileManager.fileExists(atPath: url.path) {
+            return url.resolvingSymlinksInPath().standardizedFileURL
+        }
+        guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: url.path) else {
+            return url.standardizedFileURL
+        }
+        let destinationURL: URL
+        if (destination as NSString).isAbsolutePath {
+            destinationURL = URL(fileURLWithPath: destination)
+        } else {
+            destinationURL = url.deletingLastPathComponent().appendingPathComponent(destination)
+        }
+        return destinationURL.standardizedFileURL
+    }
+
+    private func homePrefix(_ home: URL) -> String {
+        let homePath = home.path
+        return homePath.hasSuffix("/") ? homePath : homePath + "/"
+    }
+
+    private func isInsideHome(_ url: URL, home: URL) -> Bool {
+        url.path.hasPrefix(homePrefix(home))
     }
     
     private func parseContent(_ content: String, template: String) throws -> NSMutableAttributedString {
