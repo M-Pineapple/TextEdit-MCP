@@ -8,9 +8,9 @@
 [![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://www.swift.org)
 [![Stars](https://img.shields.io/github/stars/M-Pineapple/TextEdit-MCP)](https://github.com/M-Pineapple/TextEdit-MCP/stargazers)
 
-**Ask Claude for a formatted document. Open a real RTF in TextEdit.**
+**Ask your AI (Claude, ChatGPT, Cursor or any MCP client) for a formatted document. Open a real RTF in TextEdit.**
 
-<img src="docs/demo.gif" width="800" alt="Simulated demo: an MCP client asks Claude to create a standup RTF, TextEdit MCP runs create_rtf_document, then a TextEdit-style preview shows headings, a table, colours, and highlights"/>
+<img src="docs/demo.gif" width="800" alt="Simulated demo: an MCP client asks for a standup RTF, TextEdit MCP runs create_rtf_document, then a TextEdit-style preview shows headings, a table, colours, and highlights"/>
 
 <sub>Simulated demo, not a live macOS capture. The tool is <code>create_rtf_document</code>. It writes a real <code>.rtf</code> you can open in TextEdit, Pages, or Word.</sub>
 
@@ -20,7 +20,7 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to create beau
 
 ## Quick start
 
-macOS, Swift 5.9 or later, and Claude Desktop.
+macOS, Swift 5.9 or later, and an MCP client.
 
 1. Clone the repository:
 
@@ -35,7 +35,7 @@ cd TextEdit-MCP
 ./install.sh
 ```
 
-3. Restart Claude Desktop and ask for a formatted RTF on your Desktop.
+3. Restart your MCP client and ask for a formatted RTF on your Desktop.
 
 ## Features
 
