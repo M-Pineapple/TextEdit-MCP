@@ -8,9 +8,34 @@
 [![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://www.swift.org)
 [![Stars](https://img.shields.io/github/stars/M-Pineapple/TextEdit-MCP)](https://github.com/M-Pineapple/TextEdit-MCP/stargazers)
 
+**Ask Claude for a formatted document. Open a real RTF in TextEdit.**
+
+<img src="docs/demo.gif" width="800" alt="Simulated demo: an MCP client asks Claude to create a standup RTF, TextEdit MCP runs create_rtf_document, then a TextEdit-style preview shows headings, a table, colours, and highlights"/>
+
+<sub>Simulated demo, not a live macOS capture. The tool is <code>create_rtf_document</code>. It writes a real <code>.rtf</code> you can open in TextEdit, Pages, or Word.</sub>
+
 </div>
 
 A Model Context Protocol (MCP) server that enables Claude Desktop to create beautifully formatted RTF documents with native macOS TextEdit compatibility.
+
+## Quick start
+
+macOS, Swift 5.9 or later, and Claude Desktop.
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/M-Pineapple/TextEdit-MCP.git
+cd TextEdit-MCP
+```
+
+2. Run the installer:
+
+```bash
+./install.sh
+```
+
+3. Restart Claude Desktop and ask for a formatted RTF on your Desktop.
 
 ## Features
 
@@ -57,26 +82,14 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to create beau
 - Swift 5.0 or later
 - Claude Desktop
 
-### Quick Install
-
-1. Clone the repository:
-```bash
-git clone https://github.com/M-Pineapple/TextEdit-MCP.git
-cd TextEdit-MCP
-```
-
-2. Run the installer:
-```bash
-./install.sh
-```
-
-3. Restart Claude Desktop
-
 The installer will:
+
 - Build the Swift project
 - Install the MCP server binary
 - Update your Claude Desktop configuration
 - Create a backup of your existing config
+
+See [Quick start](#quick-start) for the three commands.
 
 ## Usage
 
@@ -193,6 +206,9 @@ TextEdit-MCP/
 │       ├── MCPServer.swift      # MCP protocol handler
 │       ├── RTFDocumentService.swift  # RTF generation
 │       └── MCPLogger.swift      # Logging utility
+├── docs/
+│   ├── demo.gif                 # Simulated README demo
+│   └── generate-demo-gif.py     # Regenerates the demo GIF
 ├── Package.swift
 ├── README.md
 ├── FORMATTING_GUIDE.md
@@ -218,6 +234,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Update documentation
 
 ## Support
+
+If this saves you time, a star helps others find it.
 
 If you find this tool useful, consider supporting development:
 
