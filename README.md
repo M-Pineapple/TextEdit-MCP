@@ -7,6 +7,7 @@
 [![Licence: MIT](https://img.shields.io/github/license/M-Pineapple/TextEdit-MCP)](LICENSE)
 [![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://www.swift.org)
 [![Stars](https://img.shields.io/github/stars/M-Pineapple/TextEdit-MCP)](https://github.com/M-Pineapple/TextEdit-MCP/stargazers)
+[![M-Pineapple/TextEdit-MCP MCP server](https://glama.ai/mcp/servers/M-Pineapple/TextEdit-MCP/badges/score.svg)](https://glama.ai/mcp/servers/M-Pineapple/TextEdit-MCP)
 
 **Ask your AI (Claude, ChatGPT, Cursor or any MCP client) for a formatted document. Open a real RTF in TextEdit.**
 
