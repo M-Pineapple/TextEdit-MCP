@@ -1,0 +1,5 @@
+.build
+.git
+.swiftpm
+**/.DS_Store
+.test-home

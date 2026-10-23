@@ -6,7 +6,9 @@
 //
 
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#endif
 
 struct RTFDocumentService {
     
@@ -46,6 +48,7 @@ struct RTFDocumentService {
     }
 
     func createDocument(content: String, outputPath: String, template: String) async throws -> CreateResult {
+        #if canImport(AppKit)
         // Parse the content and create attributed string
         let attributedString = try parseContent(content, template: template)
         
@@ -74,6 +77,13 @@ struct RTFDocumentService {
         } catch {
             return CreateResult(success: false, path: "", message: "Failed to write file: \(error)")
         }
+        #else
+        return CreateResult(
+            success: false,
+            path: "",
+            message: "This tool needs macOS (AppKit). It isn't available on Linux."
+        )
+        #endif
     }
 
     /// Walk up to the deepest existing ancestor (including dangling symlinks),
@@ -131,6 +141,7 @@ struct RTFDocumentService {
         url.path.hasPrefix(homePrefix(home))
     }
     
+    #if canImport(AppKit)
     private func parseContent(_ content: String, template: String) throws -> NSMutableAttributedString {
         let result = NSMutableAttributedString()
         let lines = content.components(separatedBy: .newlines)
@@ -605,4 +616,5 @@ struct RTFDocumentService {
             ]
         }
     }
+    #endif
 }
