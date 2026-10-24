@@ -39,37 +39,69 @@ class MCPServer {
     }
     
     private func processLine(_ line: String) async {
+        guard let response = await response(for: line) else {
+            return
+        }
         do {
-            // Parse JSON
-            guard let jsonData = line.data(using: .utf8),
-                  let message = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-                logger.error("Failed to parse JSON: \(line)")
-                return
-            }
-            
-            // Process the message
-            let response = try await processMessage(message)
-            
-            // Send response
             try await sendMessage(response)
-            
         } catch {
-            logger.error("Error processing line: \(error)")
+            logger.error("Error sending response: \(error)")
         }
     }
-    
-    private func processMessage(_ message: [String: Any]) async throws -> [String: Any] {
-        // Extract method and params
-        guard let method = message["method"] as? String else {
-            throw MCPError.missingMethod
+
+    /// Handles one JSON-RPC line and returns the reply, or nil when none is due
+    /// (notifications and blank lines). Every request gets exactly one reply,
+    /// either a result or a JSON-RPC error, so a client never waits forever.
+    func response(for line: String) async -> [String: Any]? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return nil
         }
-        
+
+        guard let jsonData = trimmed.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: jsonData) else {
+            logger.error("Failed to parse JSON: \(line)")
+            return createError(id: nil, code: JSONRPCError.parseError, message: "Parse error")
+        }
+
+        guard let message = parsed as? [String: Any] else {
+            return createError(id: nil, code: JSONRPCError.invalidRequest, message: "Invalid Request")
+        }
+
+        // A message without an id is a notification: never reply to it.
+        let isRequest = message.keys.contains("id")
         let id = message["id"]
-        let params = message["params"] as? [String: Any] ?? [:]
-        
+
+        guard let method = message["method"] as? String else {
+            if isRequest {
+                return createError(id: id, code: JSONRPCError.invalidRequest, message: "Invalid Request: missing method")
+            }
+            return nil
+        }
+
+        guard isRequest else {
+            logger.debug("Notification: \(method)")
+            return nil
+        }
+
+        do {
+            return try await processRequest(method: method, id: id, params: message["params"] as? [String: Any] ?? [:])
+        } catch MCPError.unknownMethod(let name) {
+            logger.debug("Unhandled method: \(name)")
+            return createError(id: id, code: JSONRPCError.methodNotFound, message: "Method not found: \(name)")
+        } catch MCPError.invalidParameters {
+            return createError(id: id, code: JSONRPCError.invalidParams, message: "Invalid params: expected name and arguments")
+        } catch MCPError.unknownTool(let name) {
+            return createError(id: id, code: JSONRPCError.invalidParams, message: "Unknown tool: \(name)")
+        } catch {
+            logger.error("Error processing \(method): \(error)")
+            return createError(id: id, code: JSONRPCError.internalError, message: "Internal error: \(error)")
+        }
+    }
+
+    private func processRequest(method: String, id: Any?, params: [String: Any]) async throws -> [String: Any] {
         logger.debug("Processing method: \(method)")
-        
-        // Handle different methods
+
         switch method {
         case "initialize":
             return createResponse(id: id, result: [
@@ -84,11 +116,10 @@ class MCPServer {
                     "resources": [:]
                 ]
             ])
-            
-        case "notifications/initialized":
-            // This is just a notification, no response needed
-            return [:]
-            
+
+        case "ping":
+            return createResponse(id: id, result: [:])
+
         case "tools/list":
             return createResponse(id: id, result: [
                 "tools": [
@@ -118,25 +149,25 @@ class MCPServer {
                     ]
                 ]
             ])
-            
+
+        case "prompts/list":
+            // Prompts are advertised, so list them even though there are none yet.
+            return createResponse(id: id, result: ["prompts": []])
+
         case "resources/list":
-            // Return empty resources list
             return createResponse(id: id, result: ["resources": []])
-            
+
+        case "resources/templates/list":
+            return createResponse(id: id, result: ["resourceTemplates": []])
+
         case "tools/call":
             return try await executeTool(params: params, id: id)
-            
+
         default:
-            // Log unhandled methods but don't crash
-            logger.debug("Unhandled method: \(method)")
-            if id != nil {
-                // Only respond if there's an ID (it's a request, not a notification)
-                return createResponse(id: id, result: [:])
-            }
-            return [:]
+            throw MCPError.unknownMethod(method)
         }
     }
-    
+
     private func executeTool(params: [String: Any], id: Any?) async throws -> [String: Any] {
         guard let toolName = params["name"] as? String,
               let arguments = params["arguments"] as? [String: Any] else {
@@ -191,17 +222,31 @@ class MCPServer {
     }
     
     private func createResponse(id: Any?, result: [String: Any]) -> [String: Any] {
-        var response: [String: Any] = [
+        return [
             "jsonrpc": "2.0",
+            "id": id ?? NSNull(),
             "result": result
         ]
-        
-        if let id = id {
-            response["id"] = id
-        }
-        
-        return response
     }
+
+    private func createError(id: Any?, code: Int, message: String) -> [String: Any] {
+        return [
+            "jsonrpc": "2.0",
+            "id": id ?? NSNull(),
+            "error": [
+                "code": code,
+                "message": message
+            ]
+        ]
+    }
+}
+
+enum JSONRPCError {
+    static let parseError = -32700
+    static let invalidRequest = -32600
+    static let methodNotFound = -32601
+    static let invalidParams = -32602
+    static let internalError = -32603
 }
 
 enum MCPError: Error {
