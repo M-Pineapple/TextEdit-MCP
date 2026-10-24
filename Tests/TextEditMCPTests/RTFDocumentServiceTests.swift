@@ -10,6 +10,7 @@ import XCTest
 
 final class RTFDocumentServiceTests: XCTestCase {
 
+    #if canImport(AppKit)
     func testCreateSimpleDocument() async throws {
         let service = RTFDocumentService()
         let fileManager = FileManager.default
@@ -44,6 +45,7 @@ final class RTFDocumentServiceTests: XCTestCase {
         XCTAssertTrue(result.success)
         XCTAssertTrue(fileManager.fileExists(atPath: result.path))
     }
+    #endif
 
     func testRefusesHiddenDotfilesAndExistingFiles() async throws {
         let service = RTFDocumentService()
